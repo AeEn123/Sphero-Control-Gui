@@ -89,6 +89,12 @@ class Application(tk.Tk):
         self.color_display = tk.Canvas(self, width=100, height=100, bg="#ffffff")
         self.color_display.pack(pady=20)
 
+        tk.Button(self, text="Quit", command=quit).pack(side=tk.BOTTOM)
+
+
+    def quit(self):
+        self.destroy()
+    
     def recalibrate(self):
         api.reset_aim()
     
@@ -144,7 +150,7 @@ class Application(tk.Tk):
             print(f"No controller found: {e}")
 
     def choose_color(self):        
-        color = colorchooser.askcolor()[0]
+        color = colorchooser.askcolor(self.current_color)[0]
         if color:
             self.current_color = tuple(map(int, color))
             self.update_color_display()
