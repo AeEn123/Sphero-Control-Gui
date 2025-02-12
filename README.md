@@ -12,6 +12,18 @@ Normal Mode - Uses speed and heading APIs to provide a smooth and stable experie
 FPV Mode - Uses raw motor commands directly from your inputs - You're in control.
 
 # Installation
+## Clone the repo
+```bash
+git clone https://github.com/AeEn123/Sphero-Control-Gui
+```
+
+## Activate Python venv (Recommended)
+```bash
+python3 -m venv venv
+source venv/bin/activate # Linux, check documentation for other operating systems
+```
+
+## Install requirements (Required)
 ```bash
 pip install -r requirements.txt
 ```
@@ -20,3 +32,9 @@ pip install -r requirements.txt
 ```bash
 python3 main.py
 ```
+
+## You can also use start.sh to automatically run it inside the venv
+```bash
+./start.sh
+```
+On steam deck you can right-click start.sh and add it to steam. This makes it easy to launch within gaming mode.
