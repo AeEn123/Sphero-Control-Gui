@@ -15,6 +15,7 @@ FPV Mode - Uses raw motor commands directly from your inputs - You're in control
 ## Clone the repo
 ```bash
 git clone https://github.com/AeEn123/Sphero-Control-Gui
+cd Sphero-Control-Gui
 ```
 
 ## Activate Python venv (Recommended)
