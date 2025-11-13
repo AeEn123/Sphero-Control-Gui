@@ -113,7 +113,6 @@ class Application(tk.Tk):
         return fpv
 
     def move(self, x,y):
-        print(x,y)
         startTime = time.time()
         if self.fpv:
             left_motor = int(min(max(y+x,-1),1)*self.speed)
@@ -125,7 +124,6 @@ class Application(tk.Tk):
             api.set_speed(round(speed))
             if angle != None:
                 api.set_heading(round(angle))
-        print(time.time()-startTime)
         return time.time()-startTime
     
     def movement_loop(self):
@@ -183,7 +181,6 @@ class Application(tk.Tk):
             self.after_id = None
 
     def update_key_display(self):
-        print(self.pressed_keys.keys())
         up = 0
         down = 0
         left = 0
@@ -216,7 +213,6 @@ class Application(tk.Tk):
             for event in pygame.event.get():
                 if event.type == pygame.JOYBUTTONDOWN:
                     self.controller_buttons[event.button] = True
-                    self.after(0, self.update_controller_display)
                     if event.button == 0:  # A button
                         self.after(0, self.recalibrate)
                     elif event.button == 1: # B button
@@ -225,7 +221,6 @@ class Application(tk.Tk):
                 elif event.type == pygame.JOYBUTTONUP:
                     if event.button in self.controller_buttons:
                         del self.controller_buttons[event.button]
-                        self.after(0, self.update_controller_display)
 
                 elif event.type == pygame.JOYAXISMOTION:
                     value = event.value
@@ -239,11 +234,114 @@ class Application(tk.Tk):
                         self.z_axis = value
             pygame.time.wait(50)
 
-    def update_controller_display(self):
-        print(self.controller_buttons.keys())
+def _scan_for_toys_with_fallback(timeout=5):
+	"""
+	Try a few scanner APIs from spherov2 and return a list of toys (may be empty).
+	This is defensive: different versions of spherov2 expose different helpers.
+	"""
+	# Try find_toys()
+	try:
+		if hasattr(scanner, "find_toys"):
+			return list(scanner.find_toys(timeout=timeout) or [])
+	# fall through to other attempts on AttributeError or TypeError
+	except Exception:
+		pass
+
+	# Last resort: single-device finder
+	try:
+		if hasattr(scanner, "find_toy"):
+			toy = scanner.find_toy(timeout=timeout)
+			return [toy] if toy else []
+	except Exception:
+		pass
+
+	return []
+
+def select_toy_dialog(timeout=5):
+	"""
+	Show a small Tk dialog listing discovered toys, allow user to rescan and pick one.
+	Returns the selected toy object or None.
+	"""
+	dialog = tk.Tk()
+	dialog.title("Select Sphero Toy")
+	dialog.geometry("640x400")
+
+	listbox = tk.Listbox(dialog)
+	listbox.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+	status = tk.Label(dialog, text="Press Scan to search for devices")
+	status.pack(fill=tk.X, padx=8)
+
+	toys = []
+
+	# control whether to show MAC/address in the list display
+	show_mac_var = tk.BooleanVar(value=False)
+	tk.Checkbutton(dialog, text="Show MAC addresses", variable=show_mac_var).pack(anchor=tk.W, padx=8)
+
+	def _format_entry(t):
+		# try a few common attributes for display
+		name = getattr(t, "name", None) or getattr(t, "friendly_name", None) or str(t)
+		addr = getattr(t, "address", None) or getattr(t, "mac", None) or getattr(t, "ble_address", None)
+		# respect the checkbox
+		if show_mac_var.get() and addr:
+			return f"{name} ({addr})"
+		return f"{name}"
+
+	def refresh_list_display():
+		# rebuild the visible list from 'toys' using current checkbox state
+		listbox.delete(0, tk.END)
+		if not toys:
+			listbox.insert(tk.END, "<No devices found, ensure Bluetooth is enabled>")
+			return
+		for t in toys:
+			listbox.insert(tk.END, _format_entry(t))
+
+	def scan():
+		status.config(text="Scanning...")
+		dialog.update()
+		found = _scan_for_toys_with_fallback(timeout=timeout)
+		toys.clear()
+		toys.extend(found)
+		refresh_list_display()
+		status.config(text=f"{len(found)} device(s) found")
+
+	def connect():
+		sel = listbox.curselection()
+		if not sel:
+			return
+		idx = sel[0]
+		# guard: if no toys or a placeholder entry, ignore
+		if idx >= len(toys):
+			return
+		dialog.selected_toy = toys[idx]
+		dialog.destroy()
+
+	button_frame = tk.Frame(dialog)
+	button_frame.pack(fill=tk.X, pady=6, padx=8)
+	tk.Button(button_frame, text="Scan", command=scan).pack(side=tk.LEFT)
+	tk.Button(button_frame, text="Connect", command=connect).pack(side=tk.RIGHT)
+
+	# Bind double-click on listbox to connect
+	listbox.bind("<Double-Button-1>", lambda e: connect())
+
+	# When checkbox toggles, refresh visible entries
+	def _on_show_mac_toggled():
+		refresh_list_display()
+	show_mac_var.trace_add("write", lambda *a: _on_show_mac_toggled())
+
+	# initial scan
+	scan()
+	dialog.mainloop()
+	return getattr(dialog, "selected_toy", None)
 
 if __name__ == "__main__":
-    toy = scanner.find_toy()
-    with SpheroEduAPI(toy) as api:
-        app = Application(toy,api)
-        app.mainloop()
+	# Show a device-selection dialog instead of automatically picking the first device
+	selected = select_toy_dialog(timeout=5)
+	if not selected:
+		print("No toy selected. Exiting.")
+		exit(1)
+
+	toy = selected
+	with SpheroEduAPI(toy) as api:
+		app = Application(toy, api)
+		app.mainloop()
