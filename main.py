@@ -266,6 +266,9 @@ def select_toy_dialog(timeout=5):
 	dialog.title("Select Sphero Toy")
 	dialog.geometry("640x400")
 
+	# remember the last clicked index (avoid relying on curselection (gamescope fix))
+	dialog._last_clicked_index = None
+
 	listbox = tk.Listbox(dialog)
 	listbox.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
 
@@ -290,6 +293,8 @@ def select_toy_dialog(timeout=5):
 	def refresh_list_display():
 		# rebuild the visible list from 'toys' using current checkbox state
 		listbox.delete(0, tk.END)
+		# reset remembered click when the list changes
+		dialog._last_clicked_index = None
 		if not toys:
 			listbox.insert(tk.END, "<No devices found, ensure Bluetooth is enabled>")
 			return
@@ -306,10 +311,11 @@ def select_toy_dialog(timeout=5):
 		status.config(text=f"{len(found)} device(s) found")
 
 	def connect():
-		sel = listbox.curselection()
-		if not sel:
+		# Use only the last clicked index (don't rely on curselection (gamescope fix))
+		idx = getattr(dialog, "_last_clicked_index", None)
+		if idx is None:
+			# nothing clicked yet; do nothing
 			return
-		idx = sel[0]
 		# guard: if no toys or a placeholder entry, ignore
 		if idx >= len(toys):
 			return
@@ -321,8 +327,26 @@ def select_toy_dialog(timeout=5):
 	tk.Button(button_frame, text="Scan", command=scan).pack(side=tk.LEFT)
 	tk.Button(button_frame, text="Connect", command=connect).pack(side=tk.RIGHT)
 
-	# Bind double-click on listbox to connect
-	listbox.bind("<Double-Button-1>", lambda e: connect())
+	# remember the index of any click inside the listbox (works when selection events are unreliable)
+	def _on_list_click(event):
+		try:
+			idx = listbox.nearest(event.y)
+			# only store if it's a real device entry
+			if 0 <= idx < len(toys):
+				dialog._last_clicked_index = idx
+			else:
+				dialog._last_clicked_index = None
+		except Exception:
+			dialog._last_clicked_index = None
+
+	# bind single click to record the index
+	listbox.bind("<Button-1>", _on_list_click)
+
+	# bind double-click to record the index from event then connect
+	def _on_double_click(event):
+		_on_list_click(event)
+		connect()
+	listbox.bind("<Double-Button-1>", _on_double_click)
 
 	# When checkbox toggles, refresh visible entries
 	def _on_show_mac_toggled():
